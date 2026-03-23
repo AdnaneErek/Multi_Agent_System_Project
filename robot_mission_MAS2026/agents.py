@@ -1,5 +1,5 @@
 # ============================================================
-# Group: XX | Date: 2026-03-16 | Members: Mounia, [partner]
+# Group: 27 | Date: 2026-03-16 | Members: Mounia, Adnane, Daniel
 # agents.py — Robots with knowledge base + communication
 #
 # Step 2: Agents read messages from the shared board to learn
