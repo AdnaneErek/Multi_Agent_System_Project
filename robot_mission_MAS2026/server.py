@@ -1,5 +1,5 @@
 # ============================================================
-# Group: XX | Date: 2026-03-16 | Members: Mounia, [partner]
+# Group: 27 | Date: 2026-03-16 | Members: Mounia, Adnane, Daniel
 # server.py — Mesa 3.3.0 visualization with SolaraViz + SpaceRenderer
 # ============================================================
 

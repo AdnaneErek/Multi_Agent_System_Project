@@ -1,5 +1,5 @@
 # ============================================================
-# Group: XX | Date: 2026-03-16 | Members: Mounia, [partner]
+# Group: 27 | Date: 2026-03-16 | Members: Mounia, Adnane, Daniel
 # objects.py — Passive environment objects (Mesa 3.x agents, no behavior)
 # ============================================================
 

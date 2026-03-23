@@ -1,5 +1,5 @@
 # ============================================================
-# Group: XX | Date: 2026-03-16 | Members: Mounia, [partner]
+# Group: 27 | Date: 2026-03-16 | Members: Mounia, Adnane, Daniel
 # model.py — RobotMission with communication (Mesa 3.3.0)
 #
 # Communication: shared message board in the environment.
