@@ -5,7 +5,7 @@
 This project implements a **multi-agent simulation** of robots cleaning dangerous waste in a hostile environment. The environment is divided into three radioactivity zones from west to east, and the robots must collectively:
 
 1. collect **green waste** in zone `z1`,
-2. transform it into **yellow waste`,
+2. transform it into **yellow waste**,
 3. transform yellow waste into **red waste**,
 4. transport the final red waste to a **waste disposal cell** located in the easternmost column.
 
