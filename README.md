@@ -16,16 +16,45 @@ The project matches the assignment specification for the *Self-organization of r
 - a first step without communication and a second step with communication,
 - data extraction and visualization. 
 
+## Quick start
+
+From the repository root:
+
+### Windows (PowerShell)
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install mesa==3.3.0 matplotlib solara
+cd robot_mission_MAS2026
+solara run server.py
+```
+
+### Linux / macOS
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install mesa==3.3.0 matplotlib solara
+cd robot_mission_MAS2026
+solara run server.py
+```
+
+Headless run (chart output):
+```bash
+cd robot_mission_MAS2026
+python run.py
+```
+
 ## Project structure
 
 ```text
 .
-├── agents.py     # Robot agents, knowledge base, deliberation, navigation, communication use
-├── model.py      # RobotMission model, grid, action execution, message board, data collection
-├── objects.py    # Passive environment objects: radioactivity, waste, disposal zone
-├── server.py     # Mesa/Solara visualization
-├── run.py        # Headless execution + result plots
-└── README.md     # Project description and execution guide
+├── README.md
+└── robot_mission_MAS2026/
+  ├── agents.py     # Robot agents, knowledge base, deliberation, navigation, communication use
+  ├── model.py      # RobotMission model, grid, action execution, message board, data collection
+  ├── objects.py    # Passive environment objects: radioactivity, waste, disposal zone
+  ├── server.py     # Mesa/Solara visualization
+  └── run.py        # Headless execution + result plots
 ```
 
 ## Simulation logic
@@ -115,6 +144,64 @@ Three message types are implemented:
 ### Why this design?
 This choice is simple, modular, and easy to debug. It avoids direct agent-to-agent coupling and respects the assignment spirit: agents reason from their own knowledge and percepts, while communication enriches that knowledge instead of replacing it.
 
+## Recent improvements 
+
+The following practical improvements were added to make the simulation more robust and easier to monitor:
+
+### 1) Deadlock handling for Green/Yellow robots
+- Added a **rendezvous strategy** for `GreenAgent` and `YellowAgent` when each robot may be stuck carrying one item with no matching item nearby.
+- If a robot holds exactly one required waste and no other same-color waste is known, it moves to a shared meeting point and drops it for consolidation.
+- Added a short **anti-repickup cooldown** to avoid immediate pick-drop loops.
+
+### 2) Deterministic conflict resolution at rendezvous
+- At rendezvous cells, only the same-type robot with the **lowest `unique_id`** is allowed to pick first.
+- This removes nondeterministic contention and reduces oscillations.
+
+### 3) Red robot singleton fallback rule
+- `RedAgent` can now dispose any carried waste color, but **cross-color pickup is constrained**:
+  - red always handles `red` waste,
+  - red handles `yellow` only when exactly **one yellow waste remains** in the whole system,
+  - red handles `green` only when exactly **one green waste remains** in the whole system.
+- This prevents interference with normal transformation flow while solving final singleton leftovers.
+
+### 4) Correct waste lifecycle in inventory
+- Introduced `InventoryWaste` (lightweight token) for carried items.
+- On pickup, grid `Waste` agents are removed from the grid/model registry and replaced in inventory by tokens.
+- On drop, a fresh grid `Waste` agent is created.
+- This avoids visualization crashes caused by unplaced `Waste` Mesa agents in inventories.
+
+### 5) Safer live plotting/data collection
+- Added `SafeDataCollector` (thread-safe wrapper around Mesa `DataCollector`) with locking.
+- Added a safe fallback in dataframe building that trims to the shortest synchronized length if needed.
+- This resolves intermittent live-plot errors caused by transient length mismatches under Solara rendering.
+
+### 6) Visualization robustness and diagnostics
+- Stabilized agent portrayal fields to avoid backend indexing issues.
+- Added robot-count metrics to the data collector:
+  - `Green Robots`, `Yellow Robots`, `Red Robots`.
+- Added robot-count chart (page 2) for quick verification that robots are not disappearing.
+
+### 7) Live robot status table (UI)
+- Added a live table component showing, for each robot:
+  - id,
+  - type,
+  - position,
+  - current inventory contents.
+- The table is displayed on **page 0** and includes current `Step` and `Running` state.
+- Component wiring was adjusted so it re-renders with simulation ticks.
+
+## Behavior rules summary
+
+| Robot type | Normal role | Extra coordination rule |
+|---|---|---|
+| `GreenAgent` | Collect green; transform `2 green → 1 yellow`; handoff east | If stuck with one green and no known second green, go to green rendezvous and drop for consolidation |
+| `YellowAgent` | Collect yellow; transform `2 yellow → 1 red`; handoff east | If stuck with one yellow and no known second yellow, go to yellow rendezvous and drop for consolidation |
+| `RedAgent` | Collect red and dispose at disposal zone | Can collect yellow/green **only** when exactly one of that color remains in whole system |
+
+Additional deterministic coordination:
+- At rendezvous cells, same-type pickup priority is given to the robot with the lowest `unique_id`.
+- A short cooldown prevents immediate re-pick after deliberate drops.
+
 ## Conceptual choices
 
 ### 1. Discrete grid world
@@ -182,6 +269,12 @@ matplotlib
 solara
 ```
 
+Install directly with:
+
+```bash
+python -m pip install mesa==3.3.0 matplotlib solara
+```
+
 ## Installation
 
 Create and activate a virtual environment, then install the dependencies.
@@ -190,19 +283,20 @@ Create and activate a virtual environment, then install the dependencies.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install mesa==3.3.0 matplotlib solara
 ```
 
 ### On Linux / macOS
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install mesa==3.3.0 matplotlib solara
 ```
 
 ## How to run the project
 
 ```bash
+cd robot_mission_MAS2026
 solara run server.py
 ```
 
@@ -210,9 +304,27 @@ The interface includes:
 - the grid visualization,
 - sliders for the number of green, yellow, and red robots,
 - a slider for the number of initial green wastes,
+- live robot status table (id, type, position, inventory),
 - plots for green/yellow/red waste counts,
 - a plot for disposed waste,
 - a plot for number of messages.
+
+### UI pages map
+- **Page 0**: grid + live robot status table.
+- **Page 1**: waste and disposal plots.
+- **Page 2**: communication and robot-count diagnostics.
+
+## Troubleshooting
+
+- **Table/plots not updating**
+  - Restart Solara server after code changes.
+  - Confirm simulation is still running (`Running: True` in the live table).
+- **`ModuleNotFoundError: mesa`**
+  - Activate the project virtual environment and reinstall dependencies.
+- **Solara/Mesa rendering crashes**
+  - Ensure you use the pinned Mesa version (`3.3.0`) and restart the app.
+- **Different behavior between runs**
+  - Interactive server run is stochastic unless a fixed seed is set.
 
 Communication should improve coordination by:
 - reducing redundant searches,
@@ -226,6 +338,12 @@ Communication should improve coordination by:
 - Navigation is greedy and local, not globally optimal.
 - No collision handling or advanced resource contention policy is modeled.
 - There is no experiment script to run many seeds and compute averages.
+- Step 3 uncertainty modeling remains to be implemented.
+
+## Known caveats
+
+- Interactive UI and headless execution may produce different trajectories if seeds differ.
+- Greedy movement is intentionally simple and not globally optimal.
 
 
 ## Reproducibility note

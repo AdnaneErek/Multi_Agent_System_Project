@@ -4,6 +4,7 @@
 # ============================================================
 
 from mesa.visualization import SolaraViz, SpaceRenderer, make_plot_component
+import solara
 from model import RobotMission
 from agents import GreenAgent, YellowAgent, RedAgent, RobotAgent
 from objects import Radioactivity, Waste, WasteDisposal
@@ -62,6 +63,44 @@ def agent_portrayal(agent):
     return {}
 
 
+@solara.component
+def robot_status_table(model, tick=0):
+    """Live table with robot id, position and carried wastes."""
+
+    robots = sorted(
+        [a for a in model.agents if isinstance(a, RobotAgent)],
+        key=lambda a: a.unique_id,
+    )
+
+    def robot_type(robot):
+        if isinstance(robot, RedAgent):
+            return "Red"
+        if isinstance(robot, YellowAgent):
+            return "Yellow"
+        if isinstance(robot, GreenAgent):
+            return "Green"
+        return "Robot"
+
+    lines = [
+        "| ID | Type | Position | Holding |",
+        "|---:|---|---|---|",
+    ]
+
+    for robot in robots:
+        pos_text = str(robot.pos) if robot.pos is not None else "-"
+        holding = [getattr(w, "color", "?") for w in robot.inventory]
+        holding_text = ", ".join(holding) if holding else "-"
+        lines.append(
+            f"| {robot.unique_id} | {robot_type(robot)} | {pos_text} | {holding_text} |"
+        )
+
+    with solara.Card("Robot live status"):
+        step_value = getattr(model, "steps", 0)
+        running_value = getattr(model, "running", True)
+        solara.Markdown(f"**Step:** {step_value}  |  **Running:** {running_value}")
+        solara.Markdown("\n".join(lines))
+
+
 model_params = {
     "width": 15,
     "height": 10,
@@ -113,6 +152,7 @@ page = SolaraViz(
     components=[
         make_plot_component(["Green Wastes", "Yellow Wastes", "Red Wastes"], page=1),
         make_plot_component(["Disposed"], page=1),
+        (lambda m: robot_status_table(m, m.steps), 0),
         make_plot_component(["Green Robots", "Yellow Robots", "Red Robots"], page=2),
         make_plot_component(["Messages"], page=2),
     ],
