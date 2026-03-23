@@ -182,19 +182,6 @@ matplotlib
 solara
 ```
 
-A minimal `requirements.txt` would be:
-
-```txt
-mesa==3.3.0
-matplotlib>=3.8
-solara>=1.30
-```
-
-Notes:
-- `mesa` is required by all source files.
-- `matplotlib` is required by `run.py` and also used in the visualization backend.
-- `solara` is required because `server.py` uses `SolaraViz`.
-
 ## Installation
 
 Create and activate a virtual environment, then install the dependencies.
@@ -213,36 +200,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-If you do not have a `requirements.txt` file yet, install directly:
-
-```bash
-pip install mesa==3.3.0 matplotlib solara
-```
-
 ## How to run the project
-
-### 1. Headless run
-This mode executes the simulation and saves a chart as `simulation_results.png`.
-
-```bash
-python run.py
-```
-
-What it does:
-- initializes the model with default parameters,
-- runs up to 300 steps,
-- prints intermediate progress every 50 steps,
-- stops early if all waste has been disposed,
-- saves a two-panel chart with waste evolution and cumulative disposal.
-
-### 2. Visualization mode
-To run the interactive visualization:
-
-```bash
-python server.py
-```
-
-Depending on your Mesa/Solara installation, you may also need to launch through Solara, for example:
 
 ```bash
 solara run server.py
@@ -255,20 +213,6 @@ The interface includes:
 - plots for green/yellow/red waste counts,
 - a plot for disposed waste,
 - a plot for number of messages.
-
-## Default parameters
-
-The default configuration used in both `server.py` and `run.py` is:
-
-```text
-width = 15
-height = 10
-n_green = 4
-n_yellow = 2
-n_red = 2
-n_wastes = 20
-seed = 42   # used in run.py only
-```
 
 Communication should improve coordination by:
 - reducing redundant searches,
