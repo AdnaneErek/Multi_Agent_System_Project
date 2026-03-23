@@ -1,0 +1,108 @@
+# ============================================================
+# Group: XX | Date: 2026-03-16 | Members: Mounia, [partner]
+# server.py — Mesa 3.3.0 visualization with SolaraViz + SpaceRenderer
+# ============================================================
+
+from mesa.visualization import SolaraViz, SpaceRenderer, make_plot_component
+from model import RobotMission
+from agents import GreenAgent, YellowAgent, RedAgent, RobotAgent
+from objects import Radioactivity, Waste, WasteDisposal
+
+
+def agent_portrayal(agent):
+    """Return portrayal dict for SpaceRenderer."""
+
+    # Robots — big colored circles
+    if isinstance(agent, RedAgent):
+        return {"color": "red", "size": 50, "marker": "o", "zorder": 2}
+    if isinstance(agent, YellowAgent):
+        return {"color": "orange", "size": 50, "marker": "o", "zorder": 2}
+    if isinstance(agent, GreenAgent):
+        return {"color": "green", "size": 50, "marker": "o", "zorder": 2}
+
+    # Wastes — small colored squares
+    if isinstance(agent, Waste):
+        color_map = {"green": "#00cc00", "yellow": "#cccc00", "red": "#cc0000"}
+        return {
+            "color": color_map.get(agent.color, "gray"),
+            "size": 25,
+            "marker": "s",
+            "zorder": 1,
+        }
+
+    # Waste disposal — dark square
+    if isinstance(agent, WasteDisposal):
+        return {"color": "#333333", "size": 80, "marker": "s", "zorder": 0}
+
+    # Radioactivity — zone background colors
+    if isinstance(agent, Radioactivity):
+        zone_colors = {1: "#c8e6c9", 2: "#fff9c4", 3: "#ffcdd2"}
+        return {
+            "color": zone_colors.get(agent.zone, "#ffffff"),
+            "size": 200,
+            "marker": "s",
+            "zorder": -1,
+        }
+
+    return {}
+
+
+model_params = {
+    "width": 15,
+    "height": 10,
+    "n_green": {
+        "type": "SliderInt",
+        "value": 4,
+        "label": "Green robots",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+    },
+    "n_yellow": {
+        "type": "SliderInt",
+        "value": 2,
+        "label": "Yellow robots",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+    },
+    "n_red": {
+        "type": "SliderInt",
+        "value": 2,
+        "label": "Red robots",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+    },
+    "n_wastes": {
+        "type": "SliderInt",
+        "value": 20,
+        "label": "Initial green wastes",
+        "min": 5,
+        "max": 50,
+        "step": 1,
+    },
+}
+
+# Create model instance
+model = RobotMission(width=15, height=10, n_green=4, n_yellow=2, n_red=2, n_wastes=20)
+
+# Create SpaceRenderer for Mesa 3.3.0
+renderer = SpaceRenderer(model=model, backend="matplotlib").render(
+    agent_portrayal=agent_portrayal
+)
+
+page = SolaraViz(
+    model,
+    renderer,
+    components=[
+        make_plot_component(["Green Wastes", "Yellow Wastes", "Red Wastes"], page=1),
+        make_plot_component(["Disposed"], page=1),
+        make_plot_component(["Messages"], page=2),
+    ],
+    model_params=model_params,
+    name="Robot Waste Cleanup Mission",
+)
+
+if __name__ == "__main__":
+    page  # noqa
