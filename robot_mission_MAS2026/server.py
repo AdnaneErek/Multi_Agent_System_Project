@@ -14,11 +14,26 @@ def agent_portrayal(agent):
 
     # Robots — big colored circles
     if isinstance(agent, RedAgent):
-        return {"color": "red", "size": 50, "marker": "o", "zorder": 2}
+        return {
+            "color": "#d62728",
+            "size": 85,
+            "marker": "o",
+            "zorder": 10,
+        }
     if isinstance(agent, YellowAgent):
-        return {"color": "orange", "size": 50, "marker": "o", "zorder": 2}
+        return {
+            "color": "#ffbf00",
+            "size": 95,
+            "marker": "^",
+            "zorder": 11,
+        }
     if isinstance(agent, GreenAgent):
-        return {"color": "green", "size": 50, "marker": "o", "zorder": 2}
+        return {
+            "color": "#2ca02c",
+            "size": 85,
+            "marker": "o",
+            "zorder": 9,
+        }
 
     # Wastes — small colored squares
     if isinstance(agent, Waste):
@@ -98,6 +113,7 @@ page = SolaraViz(
     components=[
         make_plot_component(["Green Wastes", "Yellow Wastes", "Red Wastes"], page=1),
         make_plot_component(["Disposed"], page=1),
+        make_plot_component(["Green Robots", "Yellow Robots", "Red Robots"], page=2),
         make_plot_component(["Messages"], page=2),
     ],
     model_params=model_params,

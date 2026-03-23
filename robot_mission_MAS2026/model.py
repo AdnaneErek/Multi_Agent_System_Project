@@ -8,7 +8,9 @@
 # ============================================================
 
 import mesa
-from objects import Radioactivity, Waste, WasteDisposal
+import pandas as pd
+from threading import Lock
+from objects import Radioactivity, Waste, WasteDisposal, InventoryWaste
 from agents import (
     GreenAgent, YellowAgent, RedAgent, RobotAgent,
     ACTION_MOVE, ACTION_PICK, ACTION_TRANSFORM, ACTION_PUT,
@@ -43,6 +45,47 @@ def count_disposed(model):
 
 def count_messages(model):
     return len(model.message_board)
+
+
+def count_green_robots(model):
+    return sum(1 for a in model.agents if isinstance(a, GreenAgent) and not isinstance(a, YellowAgent))
+
+
+def count_yellow_robots(model):
+    return sum(1 for a in model.agents if isinstance(a, YellowAgent) and not isinstance(a, RedAgent))
+
+
+def count_red_robots(model):
+    return sum(1 for a in model.agents if isinstance(a, RedAgent))
+
+
+class SafeDataCollector(mesa.DataCollector):
+    """Thread-safe DataCollector for Solara live rendering.
+
+    Solara plots can read model variables while the model is collecting,
+    which may expose transient unequal list lengths and crash pandas.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._lock = Lock()
+
+    def collect(self, model):
+        with self._lock:
+            return super().collect(model)
+
+    def get_model_vars_dataframe(self):
+        with self._lock:
+            if not self.model_vars:
+                return pd.DataFrame()
+
+            lengths = [len(v) for v in self.model_vars.values()]
+            if len(set(lengths)) == 1:
+                return pd.DataFrame(self.model_vars)
+
+            min_len = min(lengths)
+            safe_vars = {k: v[:min_len] for k, v in self.model_vars.items()}
+            return pd.DataFrame(safe_vars)
 
 
 class RobotMission(mesa.Model):
@@ -103,13 +146,16 @@ class RobotMission(mesa.Model):
             self.grid.place_agent(a, (x, y))
 
         # --- data collector ---
-        self.datacollector = mesa.DataCollector(
+        self.datacollector = SafeDataCollector(
             model_reporters={
                 "Green Wastes": count_green,
                 "Yellow Wastes": count_yellow,
                 "Red Wastes": count_red,
                 "Disposed": count_disposed,
                 "Messages": count_messages,
+                "Green Robots": count_green_robots,
+                "Yellow Robots": count_yellow_robots,
+                "Red Robots": count_red_robots,
             }
         )
         self.datacollector.collect(self)
@@ -179,7 +225,9 @@ class RobotMission(mesa.Model):
             cell = self.grid.get_cell_list_contents([agent.pos])
             if waste_obj in cell:
                 self.grid.remove_agent(waste_obj)
-                agent.inventory.append(waste_obj)
+                # remove from model registry; inventory keeps lightweight token
+                waste_obj.remove()
+                agent.inventory.append(InventoryWaste(waste_obj.color))
                 # COMMUNICATE: tell others this waste is gone
                 self.broadcast(agent, MSG_WASTE_PICKED, agent.pos, waste_obj.color)
 
@@ -189,18 +237,14 @@ class RobotMission(mesa.Model):
                 if len(greens) >= 2:
                     agent.inventory.remove(greens[0])
                     agent.inventory.remove(greens[1])
-                    greens[0].remove()
-                    greens[1].remove()
-                    agent.inventory.append(Waste(self, "yellow"))
+                    agent.inventory.append(InventoryWaste("yellow"))
 
             elif isinstance(agent, YellowAgent) and not isinstance(agent, RedAgent):
                 yellows = [w for w in agent.inventory if w.color == "yellow"]
                 if len(yellows) >= 2:
                     agent.inventory.remove(yellows[0])
                     agent.inventory.remove(yellows[1])
-                    yellows[0].remove()
-                    yellows[1].remove()
-                    agent.inventory.append(Waste(self, "red"))
+                    agent.inventory.append(InventoryWaste("red"))
 
         elif action_type == ACTION_PUT:
             waste_obj = action[1]
@@ -208,9 +252,9 @@ class RobotMission(mesa.Model):
                 agent.inventory.remove(waste_obj)
                 if isinstance(agent, RedAgent) and self._is_disposal(agent.pos):
                     self.disposed_count += 1
-                    waste_obj.remove()
                 else:
-                    self.grid.place_agent(waste_obj, agent.pos)
+                    dropped = Waste(self, waste_obj.color)
+                    self.grid.place_agent(dropped, agent.pos)
                     # COMMUNICATE: tell others about dropped waste
                     self.broadcast(agent, MSG_WASTE_DROPPED, agent.pos, waste_obj.color)
 
@@ -225,6 +269,25 @@ class RobotMission(mesa.Model):
     def _is_disposal(self, pos):
         cell = self.grid.get_cell_list_contents([pos])
         return any(isinstance(o, WasteDisposal) for o in cell)
+
+    def remaining_waste_counts(self):
+        """Count remaining wastes by color (grid + robot inventories)."""
+        counts = {"green": 0, "yellow": 0, "red": 0}
+
+        # on-grid wastes
+        for a in self.agents:
+            if isinstance(a, Waste) and a.pos is not None:
+                counts[a.color] += 1
+
+        # carried wastes
+        robots = [a for a in self.agents if isinstance(a, RobotAgent)]
+        for robot in robots:
+            for w in robot.inventory:
+                color = getattr(w, "color", None)
+                if color in counts:
+                    counts[color] += 1
+
+        return counts
 
     # ===================== step =====================
 

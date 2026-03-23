@@ -30,6 +30,14 @@ class Waste(mesa.Agent):
         self.color = color
 
 
+class InventoryWaste:
+    """Lightweight token for carried waste (not a Mesa agent)."""
+
+    def __init__(self, color):
+        assert color in ("green", "yellow", "red")
+        self.color = color
+
+
 class WasteDisposal(mesa.Agent):
     """Marks the waste disposal zone (easternmost column)."""
 

@@ -40,6 +40,13 @@ def _find_waste_in_cell(percepts, pos, color):
     return None
 
 
+def _find_waste_in_cell_any(percepts, pos, colors):
+    for obj in percepts.get(pos, []):
+        if isinstance(obj, Waste) and obj.color in colors:
+            return obj
+    return None
+
+
 def _has_waste_disposal(percepts, pos):
     for obj in percepts.get(pos, []):
         if isinstance(obj, WasteDisposal):
@@ -77,6 +84,8 @@ class RobotAgent(mesa.Agent):
             "target": None,
             # communication tracking
             "last_msg_step": 0,  # last step at which we read messages
+            # short cooldown after deliberate drop to avoid instant self re-pick
+            "avoid_pick_until": -1,
         }
 
     # ---------- Mesa step ----------
@@ -197,6 +206,17 @@ class RobotAgent(mesa.Agent):
                     best = p
         return best
 
+    def _nearest_known_waste_of_colors(self, k, target_colors):
+        best, best_dist = None, float("inf")
+        target_set = set(target_colors)
+        for p, colors in k["known_wastes"].items():
+            if target_set.intersection(colors):
+                d = _manhattan(p, k["pos"])
+                if 0 < d < best_dist:
+                    best_dist = d
+                    best = p
+        return best
+
     def _step_toward(self, pos, target, k):
         dx = target[0] - pos[0]
         dy = target[1] - pos[1]
@@ -235,6 +255,25 @@ class RobotAgent(mesa.Agent):
                self.target_color not in k["known_wastes"].get(k["target"], []):
                 self._clear_target(k)
 
+    def _can_pick_now(self, k):
+        return self.model.steps >= k.get("avoid_pick_until", -1)
+
+    def _set_pick_cooldown(self, k, steps=2):
+        k["avoid_pick_until"] = self.model.steps + steps
+
+    def _rendezvous_pos(self, k):
+        """Override in subclasses that need consolidation behavior."""
+        return None
+
+    def _is_lowest_id_robot_here(self, k, robot_cls):
+        """True if this robot has the lowest id among same-type robots in this cell."""
+        same_type_ids = [
+            r.unique_id
+            for r in k["percepts"].get(k["pos"], [])
+            if isinstance(r, robot_cls)
+        ]
+        return bool(same_type_ids) and self.unique_id == min(same_type_ids)
+
 
 # ================= Green Robot — zone 1 only =================
 
@@ -247,6 +286,7 @@ class GreenAgent(RobotAgent):
         pos = k["pos"]
         inv = k["inventory"]
         percepts = k["percepts"]
+        meeting_point = self._rendezvous_pos(k)
 
         # carrying yellow → deliver east
         yellows_carried = [w for w in inv if w.color == "yellow"]
@@ -266,8 +306,26 @@ class GreenAgent(RobotAgent):
 
         # green waste here → pick
         waste_here = _find_waste_in_cell(percepts, pos, self.target_color)
-        if waste_here and len(greens_carried) < self.needed:
+        can_pick_here = True
+        if pos == meeting_point:
+            can_pick_here = self._is_lowest_id_robot_here(k, GreenAgent)
+
+        if (
+            waste_here
+            and len(greens_carried) < self.needed
+            and self._can_pick_now(k)
+            and can_pick_here
+        ):
             return (ACTION_PICK, waste_here)
+
+        # deadlock resolver: if carrying exactly one green and no known other green,
+        # go to a shared rendezvous point and drop it for consolidation.
+        if len(greens_carried) == self.needed - 1 and self._nearest_known_waste(k) is None:
+            if pos == meeting_point:
+                self._clear_target(k)
+                self._set_pick_cooldown(k, steps=2)
+                return (ACTION_PUT, greens_carried[0])
+            return (ACTION_MOVE, self._step_toward(pos, meeting_point, k))
 
         # navigate to known waste (from observation OR messages) or explore
         self._validate_target(k)
@@ -283,6 +341,11 @@ class GreenAgent(RobotAgent):
 
         return (ACTION_MOVE, self._explore_move(pos, k))
 
+    def _rendezvous_pos(self, k):
+        x = self.model.zone1_end - 1
+        y = k["grid_height"] // 2
+        return (x, y)
+
 
 # ================= Yellow Robot — zones 1 & 2 =================
 
@@ -295,6 +358,7 @@ class YellowAgent(RobotAgent):
         pos = k["pos"]
         inv = k["inventory"]
         percepts = k["percepts"]
+        meeting_point = self._rendezvous_pos(k)
 
         # carrying red → deliver east
         reds_carried = [w for w in inv if w.color == "red"]
@@ -314,8 +378,26 @@ class YellowAgent(RobotAgent):
 
         # yellow waste here → pick
         waste_here = _find_waste_in_cell(percepts, pos, self.target_color)
-        if waste_here and len(yellows_carried) < self.needed:
+        can_pick_here = True
+        if pos == meeting_point:
+            can_pick_here = self._is_lowest_id_robot_here(k, YellowAgent)
+
+        if (
+            waste_here
+            and len(yellows_carried) < self.needed
+            and self._can_pick_now(k)
+            and can_pick_here
+        ):
             return (ACTION_PICK, waste_here)
+
+        # deadlock resolver: if carrying exactly one yellow and no known other yellow,
+        # converge to rendezvous and drop for another yellow robot to combine.
+        if len(yellows_carried) == self.needed - 1 and self._nearest_known_waste(k) is None:
+            if pos == meeting_point:
+                self._clear_target(k)
+                self._set_pick_cooldown(k, steps=2)
+                return (ACTION_PUT, yellows_carried[0])
+            return (ACTION_MOVE, self._step_toward(pos, meeting_point, k))
 
         # navigate using messages + observation
         self._validate_target(k)
@@ -331,6 +413,11 @@ class YellowAgent(RobotAgent):
 
         return (ACTION_MOVE, self._explore_move(pos, k))
 
+    def _rendezvous_pos(self, k):
+        x = self.model.zone2_end - 1
+        y = k["grid_height"] // 2
+        return (x, y)
+
 
 # ================= Red Robot — zones 1, 2 & 3 =================
 
@@ -344,12 +431,21 @@ class RedAgent(RobotAgent):
         inv = k["inventory"]
         percepts = k["percepts"]
 
-        # carrying red → head to disposal
-        reds_carried = [w for w in inv if w.color == "red"]
-        if reds_carried:
+        # Red always handles red waste. It handles yellow/green only if exactly
+        # one of that color remains in the whole system.
+        remaining = self.model.remaining_waste_counts()
+        collectable_colors = {"red"}
+        if remaining.get("yellow", 0) == 1:
+            collectable_colors.add("yellow")
+        if remaining.get("green", 0) == 1:
+            collectable_colors.add("green")
+
+        # carrying any waste → head to disposal
+        carried_wastes = [w for w in inv if w.color in {"green", "yellow", "red"}]
+        if carried_wastes:
             if _has_waste_disposal(percepts, pos):
                 self._clear_target(k)
-                return (ACTION_PUT, reds_carried[0])
+                return (ACTION_PUT, carried_wastes[0])
 
             # use remembered disposal location (from own observation or message)
             if k["waste_disposal"]:
@@ -363,15 +459,19 @@ class RedAgent(RobotAgent):
             else:
                 return (ACTION_MOVE, self._random_neighbor(pos, k))
 
-        # red waste here → pick
-        waste_here = _find_waste_in_cell(percepts, pos, self.target_color)
+        # any waste here → pick directly (red robot can handle all levels)
+        waste_here = _find_waste_in_cell_any(percepts, pos, collectable_colors)
         if waste_here:
             return (ACTION_PICK, waste_here)
 
-        # navigate using messages + observation
-        self._validate_target(k)
+        # navigate using messages + observation (for any waste color)
+        if k["target"]:
+            target_colors = set(k["known_wastes"].get(k["target"], []))
+            if not target_colors.intersection(collectable_colors):
+                self._clear_target(k)
+
         if not k["target"]:
-            nearest = self._nearest_known_waste(k)
+            nearest = self._nearest_known_waste_of_colors(k, collectable_colors)
             if nearest:
                 self._lock_target(k, nearest)
 
