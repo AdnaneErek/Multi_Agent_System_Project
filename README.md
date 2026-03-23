@@ -261,37 +261,13 @@ Recommended:
 - **Python 3.10+**
 
 ### Python packages
-Install the following packages:
-
-```text
-mesa==3.3.0
-matplotlib
-solara
-```
-
 Install directly with:
 
 ```bash
 python -m pip install mesa==3.3.0 matplotlib solara
 ```
 
-## Installation
-
-Create and activate a virtual environment, then install the dependencies.
-
-### On Windows (PowerShell)
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install mesa==3.3.0 matplotlib solara
-```
-
-### On Linux / macOS
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install mesa==3.3.0 matplotlib solara
-```
+Installation steps are provided in **Quick start** above.
 
 ## How to run the project
 
@@ -334,7 +310,6 @@ Communication should improve coordination by:
 ## Current limitations
 
 - No formal benchmark is included to compare communication vs no communication.
-- No uncertainty model is implemented.
 - Navigation is greedy and local, not globally optimal.
 - No collision handling or advanced resource contention policy is modeled.
 - There is no experiment script to run many seeds and compute averages.
