@@ -1,0 +1,7 @@
+mesa==3.3.0
+matplotlib==3.10.1
+numpy==2.2.4
+pandas==2.2.3
+solara==1.44.1
+starlette==0.47.2
+uvicorn==0.34.2
