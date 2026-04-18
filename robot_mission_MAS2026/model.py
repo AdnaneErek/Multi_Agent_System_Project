@@ -193,25 +193,26 @@ class MissionOrchestrator:
         distance = self._manhattan(robot.pos, target_pos)
         radio_level = self._radioactivity_level_at(target_pos)
         crowding = self._crowding_near(target_pos, radius=1)
+        weights = self.model.orchestrator_weights
 
         # uncertainty terms
-        radio_penalty = 2.5 * radio_level
-        crowd_penalty = 1.5 * max(0, crowding - 1)
+        radio_penalty = weights["radio_penalty_weight"] * radio_level
+        crowd_penalty = weights["crowd_penalty_weight"] * max(0, crowding - 1)
 
         # east-flow bonus for smoother handoff toward disposal column
         width_denom = max(1, self.model.grid.width - 1)
         east_progress = target_pos[0] / width_denom
         if isinstance(robot, RedAgent):
-            east_bonus = 0.30 * east_progress
+            east_bonus = weights["east_bonus_weight_red"] * east_progress
         else:
-            east_bonus = 0.60 * east_progress
+            east_bonus = weights["east_bonus_weight_regular"] * east_progress
 
         # prioritize scarce colors to reduce end-game deadlocks
         scarcity_bonus = 0.0
         if remaining.get(target_color, 0) <= 2:
-            scarcity_bonus = 0.75
+            scarcity_bonus = weights["scarcity_le2_bonus"]
         if remaining.get(target_color, 0) == 1:
-            scarcity_bonus = 1.25
+            scarcity_bonus = weights["scarcity_eq1_bonus"]
 
         return distance + radio_penalty + crowd_penalty - east_bonus - scarcity_bonus
 
@@ -347,7 +348,8 @@ class RobotMission(mesa.Model):
     def __init__(self, width=15, height=10, n_green=4, n_yellow=2,
                  n_red=2, n_wastes=20, seed=None,
                  use_communication=True, use_orchestrator=True,
-                 use_uncertainty_scoring=True):
+                 use_uncertainty_scoring=True,
+                 orchestrator_weights=None):
         super().__init__(seed=seed)
 
         self.grid = mesa.space.MultiGrid(width, height, torus=False)
@@ -356,6 +358,16 @@ class RobotMission(mesa.Model):
         self.use_orchestrator = use_orchestrator
         self.use_uncertainty_scoring = use_uncertainty_scoring
         self.total_messages_sent = 0
+        self.orchestrator_weights = {
+            "radio_penalty_weight": 2.5,
+            "crowd_penalty_weight": 1.5,
+            "east_bonus_weight_regular": 0.60,
+            "east_bonus_weight_red": 0.30,
+            "scarcity_le2_bonus": 0.75,
+            "scarcity_eq1_bonus": 1.25,
+        }
+        if orchestrator_weights:
+            self.orchestrator_weights.update(orchestrator_weights)
 
         # ---- communication: shared message board ----
         self.message_board = []  # list of message dicts

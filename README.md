@@ -24,7 +24,8 @@ From the repository root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install mesa==3.3.0 matplotlib solara
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 cd robot_mission_MAS2026
 solara run server.py
 ```
@@ -33,7 +34,8 @@ solara run server.py
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install mesa==3.3.0 matplotlib solara
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 cd robot_mission_MAS2026
 solara run server.py
 ```
@@ -293,7 +295,6 @@ Step 3 is implemented with a centralized orchestrator and two assignment variant
 - `step3_orchestrator_uncertainty` (uncertainty-aware weighted score).
 
 Current follow-up work:
-- tune/calibrate uncertainty-scoring weights,
 - extend significance reporting to additional pairwise comparisons.
 
 ## Step impact experiment results (multi-seed)
@@ -302,6 +303,14 @@ The script below was executed with:
 - `--seeds 20`
 - `--base-seed 100`
 - `--max-steps 500`
+
+For the uncertainty-aware Step 3 mode, calibrated weights were applied:
+- `--radio-weight 2.967`
+- `--crowd-weight 1.695`
+- `--east-regular-weight 0.567`
+- `--east-red-weight 0.414`
+- `--scarcity-le2-bonus 0.885`
+- `--scarcity-eq1-bonus 2.074`
 
 For each configuration, the table compares Step 1, Step 2, and Step 3 on:
 - completion rate,
@@ -317,37 +326,37 @@ For Step 3, an ablation is included:
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 100.0% | 184.30 ± 91.50 | 0.00 ± 0.00 | 0.00 ± 0.00 |
-| Step 2 (communication) | 80.0% | 179.70 ± 166.10 | 0.70 ± 1.49 | 138.20 ± 107.20 |
-| Step 3 (orchestrator nearest-only) | 100.0% | 94.20 ± 27.20 | 0.00 ± 0.00 | 93.70 ± 32.60 |
-| Step 3 (orchestrator uncertainty-aware) | 100.0% | 95.30 ± 15.60 | 0.00 ± 0.00 | 89.50 ± 16.70 |
+| Step 1 (no communication) | 100.0% | 183.10 ± 59.10 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 95.0% | 117.40 ± 91.20 | 0.25 ± 1.12 | 93.15 ± 55.56 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 88.05 ± 8.73 | 0.00 ± 0.00 | 84.80 ± 8.38 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 86.30 ± 9.07 | 0.00 ± 0.00 | 83.40 ± 8.82 |
 
 ### Configuration C2 — `C2_green_heavy` (`n_green=5`, `n_yellow=2`, `n_red=2`, `n_wastes=25`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 100.0% | 209.90 ± 64.60 | 0.00 ± 0.00 | 0.00 ± 0.00 |
-| Step 2 (communication) | 95.0% | 148.30 ± 104.40 | 0.10 ± 0.45 | 147.40 ± 77.80 |
-| Step 3 (orchestrator nearest-only) | 100.0% | 100.50 ± 7.00 | 0.00 ± 0.00 | 119.50 ± 6.90 |
-| Step 3 (orchestrator uncertainty-aware) | 100.0% | 106.60 ± 26.60 | 0.00 ± 0.00 | 123.50 ± 15.60 |
+| Step 1 (no communication) | 100.0% | 240.65 ± 69.00 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 100.0% | 111.85 ± 22.23 | 0.00 ± 0.00 | 119.65 ± 16.87 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 106.05 ± 14.47 | 0.00 ± 0.00 | 123.00 ± 12.00 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 110.60 ± 24.90 | 0.00 ± 0.00 | 126.00 ± 19.03 |
 
 ### Configuration C3 — `C3_pipeline_strong` (`n_green=4`, `n_yellow=3`, `n_red=3`, `n_wastes=25`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 100.0% | 179.40 ± 67.20 | 0.00 ± 0.00 | 0.00 ± 0.00 |
-| Step 2 (communication) | 100.0% | 111.50 ± 67.70 | 0.00 ± 0.00 | 119.80 ± 48.40 |
-| Step 3 (orchestrator nearest-only) | 100.0% | 85.70 ± 9.90 | 0.00 ± 0.00 | 107.00 ± 7.90 |
-| Step 3 (orchestrator uncertainty-aware) | 100.0% | 83.00 ± 9.90 | 0.00 ± 0.00 | 106.20 ± 10.00 |
+| Step 1 (no communication) | 100.0% | 158.20 ± 57.84 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 100.0% | 95.80 ± 18.06 | 0.00 ± 0.00 | 111.35 ± 16.34 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 84.90 ± 10.91 | 0.00 ± 0.00 | 106.15 ± 8.73 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 91.00 ± 19.12 | 0.00 ± 0.00 | 111.15 ± 10.59 |
 
 ### Configuration C4 — `C4_red_limited` (`n_green=4`, `n_yellow=2`, `n_red=1`, `n_wastes=20`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 75.0% | 354.40 ± 122.30 | 0.40 ± 0.75 | 0.00 ± 0.00 |
-| Step 2 (communication) | 85.0% | 188.10 ± 141.80 | 0.40 ± 1.05 | 137.30 ± 140.40 |
-| Step 3 (orchestrator nearest-only) | 100.0% | 117.20 ± 27.30 | 0.00 ± 0.00 | 73.80 ± 4.90 |
-| Step 3 (orchestrator uncertainty-aware) | 100.0% | 144.40 ± 56.90 | 0.00 ± 0.00 | 72.40 ± 9.90 |
+| Step 1 (no communication) | 85.0% | 311.65 ± 129.16 | 0.20 ± 0.52 | 0.00 ± 0.00 |
+| Step 2 (communication) | 80.0% | 244.80 ± 157.81 | 0.50 ± 1.10 | 186.30 ± 145.24 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 121.45 ± 39.70 | 0.00 ± 0.00 | 73.75 ± 6.29 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 113.35 ± 27.28 | 0.00 ± 0.00 | 74.45 ± 6.64 |
 
 ### Interpretation
 
@@ -356,30 +365,12 @@ Across these refreshed 20-seed experiments, Step 3 (both variants) is the most r
 - both are consistently faster than Step 1 and usually faster than Step 2,
 - both keep **remaining waste at 0.00** on average in all four configurations.
 
-Specific impact of uncertainty-aware scoring (`uncertainty` vs `nearest`):
-- **C3**: slight speed gain for uncertainty-aware scoring.
-- **C1/C2/C4**: nearest-only is faster on average.
-- **C1/C4**: uncertainty-aware scoring can reduce message traffic.
+Specific impact of calibrated uncertainty-aware scoring (`uncertainty` vs `nearest`):
+- **C1**: uncertainty-aware is faster and sends fewer messages.
+- **C2/C3**: nearest-only is faster and sends fewer messages.
+- **C4**: uncertainty-aware is faster, with similar message volume.
 
-So, uncertainty-aware scoring helps in selected settings, while nearest-only remains stronger in others. This indicates the weighting is promising but still needs calibration for uniformly best performance.
-
-### Statistical significance testing
-
-The experiment script now includes paired significance tests (same seeds across compared modes):
-- **Paired permutation test** (two-sided) on mean step difference and mean message difference.
-- **Exact McNemar test** on completion outcomes.
-
-Main comparisons and outcomes:
-- **Step 2 vs Step 3 nearest-only**
-  - significant step improvement for Step 3 in C1, C2, C3, C4 (`p < 0.05`).
-- **Step 2 vs Step 3 uncertainty-aware**
-  - significant step improvement for Step 3 in C1 and C3;
-  - significant message reduction for Step 3 in C4.
-- **Step 3 nearest-only vs Step 3 uncertainty-aware**
-  - no statistically significant difference in most comparisons at `α = 0.05`.
-
-Significance outputs are saved to:
-- `robot_mission_MAS2026/step_impact_significance.csv`
+So, calibration improved uncertainty-aware behavior in C1 and C4, but nearest-only is still stronger in C2 and C3.
 
 ## Reproducing benchmark tables (canonical commands)
 
@@ -399,7 +390,9 @@ python run_step_impact_experiments.py --seeds 20 --base-seed 100 --max-steps 500
 Generated files:
 - `robot_mission_MAS2026/step_impact_results.csv`
 - `robot_mission_MAS2026/step_impact_summary.csv`
-- `robot_mission_MAS2026/step_impact_significance.csv`
+
+Calibrated weights search output:
+- `robot_mission_MAS2026/uncertainty_weight_calibration.csv`
 
 ## Requirements
 
@@ -408,10 +401,10 @@ Recommended:
 - **Python 3.10+**
 
 ### Python packages
-Install directly with:
+Install from pinned requirements:
 
 ```bash
-python -m pip install mesa==3.3.0 matplotlib solara
+python -m pip install -r requirements.txt
 ```
 
 Installation steps are provided in **Quick start** above.

@@ -56,6 +56,7 @@ def run_one(config, mode, seed, max_steps=MAX_STEPS):
         use_communication=mode["use_communication"],
         use_orchestrator=mode["use_orchestrator"],
         use_uncertainty_scoring=mode.get("use_uncertainty_scoring", False),
+        orchestrator_weights=mode.get("orchestrator_weights"),
     )
 
     completed = False
@@ -230,12 +231,38 @@ def parse_args():
         default=MAX_STEPS,
         help=f"Maximum steps per run (default: {MAX_STEPS}).",
     )
+    parser.add_argument("--radio-weight", type=float, default=None, help="Uncertainty mode radioactivity penalty weight.")
+    parser.add_argument("--crowd-weight", type=float, default=None, help="Uncertainty mode crowding penalty weight.")
+    parser.add_argument("--east-regular-weight", type=float, default=None, help="Uncertainty mode east-flow bonus weight for green/yellow robots.")
+    parser.add_argument("--east-red-weight", type=float, default=None, help="Uncertainty mode east-flow bonus weight for red robots.")
+    parser.add_argument("--scarcity-le2-bonus", type=float, default=None, help="Uncertainty mode scarcity bonus when remaining <= 2.")
+    parser.add_argument("--scarcity-eq1-bonus", type=float, default=None, help="Uncertainty mode scarcity bonus when remaining == 1.")
     return parser.parse_args()
+
+
+def build_uncertainty_weights(args):
+    values = {
+        "radio_penalty_weight": args.radio_weight,
+        "crowd_penalty_weight": args.crowd_weight,
+        "east_bonus_weight_regular": args.east_regular_weight,
+        "east_bonus_weight_red": args.east_red_weight,
+        "scarcity_le2_bonus": args.scarcity_le2_bonus,
+        "scarcity_eq1_bonus": args.scarcity_eq1_bonus,
+    }
+    cleaned = {k: v for k, v in values.items() if v is not None}
+    return cleaned if cleaned else None
 
 
 def main():
     args = parse_args()
     results = []
+    calibrated_weights = build_uncertainty_weights(args)
+    modes = [dict(m) for m in MODES]
+    if calibrated_weights is not None:
+        for mode in modes:
+            if mode["mode"] == "step3_orchestrator_uncertainty":
+                mode["orchestrator_weights"] = calibrated_weights
+                break
 
     for config_index, config in enumerate(CONFIGS):
         print(f"\n=== {config['name']} ===")
@@ -244,12 +271,12 @@ def main():
         for seed_offset in range(args.seeds):
             seed = config_seed_start + seed_offset
 
-            for mode in MODES:
+            for mode in modes:
                 result = run_one(config, mode, seed=seed, max_steps=args.max_steps)
                 results.append(result)
 
         # quick per-config completion snapshot
-        for mode in MODES:
+        for mode in modes:
             mode_rows = [
                 r for r in results
                 if r["config"] == config["name"] and r["mode"] == mode["mode"]
