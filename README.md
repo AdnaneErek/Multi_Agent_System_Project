@@ -297,6 +297,40 @@ Step 3 is implemented with a centralized orchestrator and two assignment variant
 Current follow-up work:
 - extend significance reporting to additional pairwise comparisons.
 
+## Uncertainty-weight calibration (short report)
+
+### Search space
+- `radio_penalty_weight`: `[1.0, 4.0]`
+- `crowd_penalty_weight`: `[0.5, 2.5]`
+- `east_bonus_weight_regular`: `[0.2, 1.0]`
+- `east_bonus_weight_red`: `[0.1, 0.7]`
+- `scarcity_le2_bonus`: `[0.2, 1.6]`
+- `scarcity_eq1_bonus`: `[0.6, 2.2]`
+- constraint: `scarcity_eq1_bonus >= scarcity_le2_bonus`
+
+### Objective formula
+The calibration minimizes:
+
+`objective = (1 - completion_rate) * 1000 + remaining_mean * 25 + steps_mean + messages_mean / 1000`
+
+Priority order is: completion > leftovers > speed > communication cost.
+
+### Selected weights
+Best candidate from `uncertainty_weight_calibration.csv`:
+- `radio_penalty_weight = 2.967`
+- `crowd_penalty_weight = 1.695`
+- `east_bonus_weight_regular = 0.567`
+- `east_bonus_weight_red = 0.414`
+- `scarcity_le2_bonus = 0.885`
+- `scarcity_eq1_bonus = 2.074`
+
+These weights are now injected as the default uncertainty-scoring weights in the orchestrator.
+
+### Final impact summary
+- Step 3 remains the most robust family (100% completion across all 4 configs).
+- Calibrated uncertainty-aware scoring is better in C1 and C4.
+- Nearest-only remains faster in C2 and C3.
+
 ## Step impact experiment results (multi-seed)
 
 The script below was executed with:

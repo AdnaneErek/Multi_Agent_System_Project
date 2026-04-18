@@ -21,6 +21,16 @@ MSG_WASTE_DROPPED = "waste_dropped"     # "I dropped waste of color X at pos"
 MSG_WASTE_PICKED = "waste_picked"       # "I picked up waste at pos (it's gone)"
 MSG_DISPOSAL_FOUND = "disposal_found"   # "Waste disposal is at pos"
 
+# Calibrated uncertainty weights (selected from calibration search)
+DEFAULT_ORCHESTRATOR_WEIGHTS = {
+    "radio_penalty_weight": 2.967,
+    "crowd_penalty_weight": 1.695,
+    "east_bonus_weight_regular": 0.567,
+    "east_bonus_weight_red": 0.414,
+    "scarcity_le2_bonus": 0.885,
+    "scarcity_eq1_bonus": 2.074,
+}
+
 
 def count_green(model):
     return sum(
@@ -358,14 +368,7 @@ class RobotMission(mesa.Model):
         self.use_orchestrator = use_orchestrator
         self.use_uncertainty_scoring = use_uncertainty_scoring
         self.total_messages_sent = 0
-        self.orchestrator_weights = {
-            "radio_penalty_weight": 2.5,
-            "crowd_penalty_weight": 1.5,
-            "east_bonus_weight_regular": 0.60,
-            "east_bonus_weight_red": 0.30,
-            "scarcity_le2_bonus": 0.75,
-            "scarcity_eq1_bonus": 1.25,
-        }
+        self.orchestrator_weights = dict(DEFAULT_ORCHESTRATOR_WEIGHTS)
         if orchestrator_weights:
             self.orchestrator_weights.update(orchestrator_weights)
 
