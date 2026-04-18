@@ -44,6 +44,17 @@ cd robot_mission_MAS2026
 python run.py
 ```
 
+Step impact experiment (Step 1 vs Step 2 vs Step 3):
+```bash
+cd robot_mission_MAS2026
+python run_step_impact_experiments.py
+```
+
+Optional multi-seed controls:
+```bash
+python run_step_impact_experiments.py --seeds 20 --base-seed 100 --max-steps 500
+```
+
 ## Project structure
 
 ```text
@@ -275,6 +286,61 @@ Planned next Step 3 increments:
 - add communication/no-communication/orchestrated benchmark runs,
 - export multi-seed statistics for comparison.
 
+## Step impact experiment results (multi-seed)
+
+The script below was executed with:
+- `--seeds 20`
+- `--base-seed 100`
+- `--max-steps 500`
+
+For each configuration, the table compares Step 1, Step 2, and Step 3 on:
+- completion rate,
+- average number of executed steps (`mean ± std`),
+- average remaining waste,
+- average messages sent.
+
+### Configuration C1 — `C1_balanced_small` (`n_green=3`, `n_yellow=2`, `n_red=2`, `n_wastes=15`)
+
+| Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
+|---|---:|---:|---:|---:|
+| Step 1 (no communication) | 95.0% | 218.85 ± 94.48 | 0.05 ± 0.22 | 0.00 ± 0.00 |
+| Step 2 (communication) | 75.0% | 193.55 ± 181.95 | 0.85 ± 1.57 | 147.30 ± 114.31 |
+| Step 3 (orchestrator + communication) | 100.0% | 89.90 ± 9.81 | 0.00 ± 0.00 | 86.60 ± 12.51 |
+
+### Configuration C2 — `C2_green_heavy` (`n_green=5`, `n_yellow=2`, `n_red=2`, `n_wastes=25`)
+
+| Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
+|---|---:|---:|---:|---:|
+| Step 1 (no communication) | 100.0% | 213.25 ± 57.01 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 100.0% | 128.10 ± 81.82 | 0.00 ± 0.00 | 134.20 ± 57.66 |
+| Step 3 (orchestrator + communication) | 100.0% | 103.20 ± 10.25 | 0.00 ± 0.00 | 121.90 ± 10.14 |
+
+### Configuration C3 — `C3_pipeline_strong` (`n_green=4`, `n_yellow=3`, `n_red=3`, `n_wastes=25`)
+
+| Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
+|---|---:|---:|---:|---:|
+| Step 1 (no communication) | 100.0% | 160.80 ± 50.02 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 95.0% | 131.25 ± 99.50 | 0.15 ± 0.67 | 137.65 ± 70.10 |
+| Step 3 (orchestrator + communication) | 100.0% | 83.00 ± 11.36 | 0.00 ± 0.00 | 105.95 ± 7.82 |
+
+### Configuration C4 — `C4_red_limited` (`n_green=4`, `n_yellow=2`, `n_red=1`, `n_wastes=20`)
+
+| Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
+|---|---:|---:|---:|---:|
+| Step 1 (no communication) | 85.0% | 312.60 ± 102.69 | 0.40 ± 1.19 | 0.00 ± 0.00 |
+| Step 2 (communication) | 80.0% | 195.00 ± 160.52 | 0.40 ± 0.82 | 154.10 ± 155.13 |
+| Step 3 (orchestrator + communication) | 100.0% | 126.85 ± 32.04 | 0.00 ± 0.00 | 73.15 ± 8.05 |
+
+### Interpretation
+
+Across these 20-seed experiments, Step 3 is the most robust and consistent setting:
+- it reaches **100% completion** in all four configurations,
+- it has the **lowest average steps** in all four configurations,
+- it keeps **remaining waste at 0.00** on average in all four configurations,
+- and it sends fewer messages than Step 2 on average in all four configurations.
+
+Step 2 improves speed over Step 1 in many runs, but it is less stable (larger standard deviations and lower completion rates in some configurations). The orchestrator in Step 3 appears to reduce oscillations and improve convergence reliability.
+
 ## Requirements
 
 ### Python version
@@ -335,10 +401,10 @@ Communication should improve coordination by:
 
 ## Current limitations
 
-- No formal benchmark is included to compare communication vs no communication.
+- Benchmarking is currently limited to internal multi-seed experiments (no external baseline yet).
 - Navigation is greedy and local, not globally optimal.
 - No collision handling or advanced resource contention policy is modeled.
-- There is no experiment script to run many seeds and compute averages.
+- The step-impact script supports multi-seed runs, but no hypothesis test/significance test is included yet.
 - Step 3 uncertainty modeling is not yet complete (orchestrator baseline added).
 
 ## Known caveats

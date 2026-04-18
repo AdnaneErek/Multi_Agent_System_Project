@@ -47,6 +47,10 @@ def count_messages(model):
     return len(model.message_board)
 
 
+def count_total_messages(model):
+    return model.total_messages_sent
+
+
 def count_green_robots(model):
     return sum(1 for a in model.agents if isinstance(a, GreenAgent) and not isinstance(a, YellowAgent))
 
@@ -268,12 +272,15 @@ class RobotMission(mesa.Model):
     """Mesa 3.3.0 model with inter-agent communication."""
 
     def __init__(self, width=15, height=10, n_green=4, n_yellow=2,
-                 n_red=2, n_wastes=20, seed=None, use_orchestrator=True):
+                 n_red=2, n_wastes=20, seed=None,
+                 use_communication=True, use_orchestrator=True):
         super().__init__(seed=seed)
 
         self.grid = mesa.space.MultiGrid(width, height, torus=False)
         self.disposed_count = 0
+        self.use_communication = use_communication
         self.use_orchestrator = use_orchestrator
+        self.total_messages_sent = 0
 
         # ---- communication: shared message board ----
         self.message_board = []  # list of message dicts
@@ -331,6 +338,7 @@ class RobotMission(mesa.Model):
                 "Red Wastes": count_red,
                 "Disposed": count_disposed,
                 "Messages": count_messages,
+                "Total Messages Sent": count_total_messages,
                 "Green Robots": count_green_robots,
                 "Yellow Robots": count_yellow_robots,
                 "Red Robots": count_red_robots,
@@ -350,6 +358,9 @@ class RobotMission(mesa.Model):
 
     def broadcast(self, sender, msg_type, pos, color=None):
         """Post a message to the shared board."""
+        if not self.use_communication:
+            return
+
         self.message_board.append({
             "type": msg_type,
             "sender_id": sender.unique_id,
@@ -357,9 +368,12 @@ class RobotMission(mesa.Model):
             "color": color,
             "step": self.steps,
         })
+        self.total_messages_sent += 1
 
     def get_messages(self, since_step=0):
         """Return all messages posted since a given step."""
+        if not self.use_communication:
+            return []
         return [m for m in self.message_board if m["step"] >= since_step]
 
     def _expire_messages(self):
