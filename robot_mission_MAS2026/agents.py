@@ -82,6 +82,7 @@ class RobotAgent(mesa.Agent):
             "visited": set(),
             "waste_disposal": None,
             "target": None,
+            "target_source": None,
             # communication tracking
             "last_msg_step": 0,  # last step at which we read messages
             # short cooldown after deliberate drop to avoid instant self re-pick
@@ -242,14 +243,18 @@ class RobotAgent(mesa.Agent):
             return None
         return self._step_toward(pos, target, k)
 
-    def _lock_target(self, k, target):
+    def _lock_target(self, k, target, source="local"):
         k["target"] = target
+        k["target_source"] = source
 
     def _clear_target(self, k):
         k["target"] = None
+        k["target_source"] = None
 
     def _validate_target(self, k):
         """Clear target if waste is no longer there (from messages or observation)."""
+        if k.get("target_source") == "orchestrator":
+            return
         if k["target"]:
             if k["target"] not in k["known_wastes"] or \
                self.target_color not in k["known_wastes"].get(k["target"], []):
@@ -328,6 +333,12 @@ class GreenAgent(RobotAgent):
             return (ACTION_MOVE, self._step_toward(pos, meeting_point, k))
 
         # navigate to known waste (from observation OR messages) or explore
+        orchestrated_target = self.model.get_orchestrator_target(self)
+        if orchestrated_target:
+            self._lock_target(k, orchestrated_target, source="orchestrator")
+        elif k.get("target_source") == "orchestrator":
+            self._clear_target(k)
+
         self._validate_target(k)
         if not k["target"]:
             nearest = self._nearest_known_waste(k)
@@ -400,6 +411,12 @@ class YellowAgent(RobotAgent):
             return (ACTION_MOVE, self._step_toward(pos, meeting_point, k))
 
         # navigate using messages + observation
+        orchestrated_target = self.model.get_orchestrator_target(self)
+        if orchestrated_target:
+            self._lock_target(k, orchestrated_target, source="orchestrator")
+        elif k.get("target_source") == "orchestrator":
+            self._clear_target(k)
+
         self._validate_target(k)
         if not k["target"]:
             nearest = self._nearest_known_waste(k)
@@ -465,9 +482,15 @@ class RedAgent(RobotAgent):
             return (ACTION_PICK, waste_here)
 
         # navigate using messages + observation (for any waste color)
+        orchestrated_target = self.model.get_orchestrator_target(self)
+        if orchestrated_target:
+            self._lock_target(k, orchestrated_target, source="orchestrator")
+        elif k.get("target_source") == "orchestrator":
+            self._clear_target(k)
+
         if k["target"]:
             target_colors = set(k["known_wastes"].get(k["target"], []))
-            if not target_colors.intersection(collectable_colors):
+            if k.get("target_source") != "orchestrator" and not target_colors.intersection(collectable_colors):
                 self._clear_target(k)
 
         if not k["target"]:

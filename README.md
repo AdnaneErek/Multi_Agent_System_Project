@@ -190,6 +190,22 @@ The following practical improvements were added to make the simulation more robu
 - The table is displayed on **page 0** and includes current `Step` and `Running` state.
 - Component wiring was adjusted so it re-renders with simulation ticks.
 
+### 8) Step 3 kickoff: centralized orchestrator
+- Added a model-level **MissionOrchestrator** that computes short-horizon assignments for all robot types.
+- At each simulation step, the orchestrator allocates waste targets to reduce duplicate chasing:
+  - `GreenAgent` gets prioritized `green` targets,
+  - `YellowAgent` gets prioritized `yellow` targets,
+  - `RedAgent` gets prioritized `red` targets, with singleton fallback to `yellow`/`green`.
+- Robots still preserve their local deliberation logic; orchestrator targets act as guidance and are combined with local percepts, memory, and message-board updates.
+
+### 9) Orchestrator diagnostics (Step 3 monitoring)
+- Added orchestrator telemetry to the data collector:
+  - `Orchestrator Assigned`
+  - `Orchestrator Eligible`
+  - `Orchestrator Coverage %`
+  - `Assigned Green Targets`, `Assigned Yellow Targets`, `Assigned Red Targets`
+- Added page 2 charts to monitor assignment quality over time.
+
 ## Behavior rules summary
 
 | Robot type | Normal role | Extra coordination rule |
@@ -251,8 +267,13 @@ Communication capabilities are implemented through:
 - synchronization of known waste locations,
 - broadcasting of discovered disposal location.
 
-### Step 3 — Not implemented
-The assignment states that uncertainties are planned for Step 3 and are still to be defined. 
+### Step 3 — In progress
+Step 3 has started with a first coordination layer: a centralized orchestrator that guides all robots toward distributed targets.
+
+Planned next Step 3 increments:
+- integrate uncertainty-aware scoring in orchestrator assignments,
+- add communication/no-communication/orchestrated benchmark runs,
+- export multi-seed statistics for comparison.
 
 ## Requirements
 
@@ -283,12 +304,17 @@ The interface includes:
 - live robot status table (id, type, position, inventory),
 - plots for green/yellow/red waste counts,
 - a plot for disposed waste,
-- a plot for number of messages.
+- a plot for number of messages,
+- orchestrator assignment/coverage diagnostics.
 
 ### UI pages map
 - **Page 0**: grid + live robot status table.
 - **Page 1**: waste and disposal plots.
 - **Page 2**: communication and robot-count diagnostics.
+- **Page 2** also includes orchestrator diagnostics:
+  - assigned vs eligible robots,
+  - assignment split by robot type,
+  - assignment coverage percentage.
 
 ## Troubleshooting
 
@@ -313,7 +339,7 @@ Communication should improve coordination by:
 - Navigation is greedy and local, not globally optimal.
 - No collision handling or advanced resource contention policy is modeled.
 - There is no experiment script to run many seeds and compute averages.
-- Step 3 uncertainty modeling remains to be implemented.
+- Step 3 uncertainty modeling is not yet complete (orchestrator baseline added).
 
 ## Known caveats
 

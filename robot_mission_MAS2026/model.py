@@ -59,6 +59,42 @@ def count_red_robots(model):
     return sum(1 for a in model.agents if isinstance(a, RedAgent))
 
 
+def count_orchestrator_assigned(model):
+    if not model.use_orchestrator:
+        return 0
+    return model.orchestrator.last_stats.get("assigned_total", 0)
+
+
+def count_orchestrator_eligible(model):
+    if not model.use_orchestrator:
+        return 0
+    return model.orchestrator.last_stats.get("eligible_total", 0)
+
+
+def count_orchestrator_coverage(model):
+    if not model.use_orchestrator:
+        return 0.0
+    return model.orchestrator.last_stats.get("coverage_pct", 0.0)
+
+
+def count_orchestrator_assigned_green(model):
+    if not model.use_orchestrator:
+        return 0
+    return model.orchestrator.last_stats.get("assigned_green", 0)
+
+
+def count_orchestrator_assigned_yellow(model):
+    if not model.use_orchestrator:
+        return 0
+    return model.orchestrator.last_stats.get("assigned_yellow", 0)
+
+
+def count_orchestrator_assigned_red(model):
+    if not model.use_orchestrator:
+        return 0
+    return model.orchestrator.last_stats.get("assigned_red", 0)
+
+
 class SafeDataCollector(mesa.DataCollector):
     """Thread-safe DataCollector for Solara live rendering.
 
@@ -88,19 +124,161 @@ class SafeDataCollector(mesa.DataCollector):
             return pd.DataFrame(safe_vars)
 
 
+class MissionOrchestrator:
+    """Centralized coordinator that assigns waste targets to robots."""
+
+    def __init__(self, model):
+        self.model = model
+        self.assignments = {}
+        self.last_stats = {
+            "eligible_green": 0,
+            "eligible_yellow": 0,
+            "eligible_red": 0,
+            "eligible_total": 0,
+            "assigned_green": 0,
+            "assigned_yellow": 0,
+            "assigned_red": 0,
+            "assigned_total": 0,
+            "coverage_pct": 0.0,
+        }
+
+    @staticmethod
+    def _manhattan(a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+    def _on_grid_waste_positions(self):
+        positions = {"green": [], "yellow": [], "red": []}
+        for a in self.model.agents:
+            if isinstance(a, Waste) and a.pos is not None and a.color in positions:
+                positions[a.color].append(a.pos)
+        return positions
+
+    @staticmethod
+    def _count_inventory(robot, color):
+        return sum(1 for w in robot.inventory if getattr(w, "color", None) == color)
+
+    @staticmethod
+    def _is_carrying_any_waste(robot):
+        return any(getattr(w, "color", None) in {"green", "yellow", "red"} for w in robot.inventory)
+
+    def _nearest_unreserved(self, origin, candidates, reserved):
+        best = None
+        best_dist = float("inf")
+        for p in candidates:
+            if p in reserved:
+                continue
+            d = self._manhattan(origin, p)
+            if d < best_dist:
+                best_dist = d
+                best = p
+        return best
+
+    def recompute(self):
+        assignments = {}
+        reserved = set()
+        positions = self._on_grid_waste_positions()
+        remaining = self.model.remaining_waste_counts()
+        stats = {
+            "eligible_green": 0,
+            "eligible_yellow": 0,
+            "eligible_red": 0,
+            "eligible_total": 0,
+            "assigned_green": 0,
+            "assigned_yellow": 0,
+            "assigned_red": 0,
+            "assigned_total": 0,
+            "coverage_pct": 0.0,
+        }
+
+        robots = [a for a in self.model.agents if isinstance(a, RobotAgent) and a.pos is not None]
+
+        green_robots = [
+            r for r in robots
+            if isinstance(r, GreenAgent) and not isinstance(r, YellowAgent)
+        ]
+        yellow_robots = [
+            r for r in robots
+            if isinstance(r, YellowAgent) and not isinstance(r, RedAgent)
+        ]
+        red_robots = [r for r in robots if isinstance(r, RedAgent)]
+
+        for robot in green_robots:
+            if self._count_inventory(robot, "yellow") > 0:
+                continue
+            if self._count_inventory(robot, "green") >= 2:
+                continue
+            stats["eligible_green"] += 1
+            target = self._nearest_unreserved(robot.pos, positions["green"], reserved)
+            if target is not None:
+                assignments[robot.unique_id] = target
+                reserved.add(target)
+                stats["assigned_green"] += 1
+
+        for robot in yellow_robots:
+            if self._count_inventory(robot, "red") > 0:
+                continue
+            if self._count_inventory(robot, "yellow") >= 2:
+                continue
+            stats["eligible_yellow"] += 1
+            target = self._nearest_unreserved(robot.pos, positions["yellow"], reserved)
+            if target is not None:
+                assignments[robot.unique_id] = target
+                reserved.add(target)
+                stats["assigned_yellow"] += 1
+
+        for robot in red_robots:
+            if self._is_carrying_any_waste(robot):
+                continue
+
+            stats["eligible_red"] += 1
+
+            collectable = {"red"}
+            if remaining.get("yellow", 0) == 1:
+                collectable.add("yellow")
+            if remaining.get("green", 0) == 1:
+                collectable.add("green")
+
+            candidates = []
+            for color in collectable:
+                candidates.extend(positions[color])
+
+            target = self._nearest_unreserved(robot.pos, candidates, reserved)
+            if target is not None:
+                assignments[robot.unique_id] = target
+                reserved.add(target)
+                stats["assigned_red"] += 1
+
+        stats["eligible_total"] = (
+            stats["eligible_green"] + stats["eligible_yellow"] + stats["eligible_red"]
+        )
+        stats["assigned_total"] = (
+            stats["assigned_green"] + stats["assigned_yellow"] + stats["assigned_red"]
+        )
+        if stats["eligible_total"] > 0:
+            stats["coverage_pct"] = 100.0 * stats["assigned_total"] / stats["eligible_total"]
+
+        self.assignments = assignments
+        self.last_stats = stats
+
+    def get_target(self, robot):
+        return self.assignments.get(robot.unique_id)
+
+
 class RobotMission(mesa.Model):
     """Mesa 3.3.0 model with inter-agent communication."""
 
     def __init__(self, width=15, height=10, n_green=4, n_yellow=2,
-                 n_red=2, n_wastes=20, seed=None):
+                 n_red=2, n_wastes=20, seed=None, use_orchestrator=True):
         super().__init__(seed=seed)
 
         self.grid = mesa.space.MultiGrid(width, height, torus=False)
         self.disposed_count = 0
+        self.use_orchestrator = use_orchestrator
 
         # ---- communication: shared message board ----
         self.message_board = []  # list of message dicts
         self.message_ttl = 50   # messages expire after 50 steps
+        self.orchestrator = MissionOrchestrator(self)
 
         # zone boundaries
         self.zone1_end = width // 3
@@ -156,8 +334,16 @@ class RobotMission(mesa.Model):
                 "Green Robots": count_green_robots,
                 "Yellow Robots": count_yellow_robots,
                 "Red Robots": count_red_robots,
+                "Orchestrator Assigned": count_orchestrator_assigned,
+                "Orchestrator Eligible": count_orchestrator_eligible,
+                "Orchestrator Coverage %": count_orchestrator_coverage,
+                "Assigned Green Targets": count_orchestrator_assigned_green,
+                "Assigned Yellow Targets": count_orchestrator_assigned_yellow,
+                "Assigned Red Targets": count_orchestrator_assigned_red,
             }
         )
+        if self.use_orchestrator:
+            self.orchestrator.recompute()
         self.datacollector.collect(self)
 
     # ===================== communication =====================
@@ -289,13 +475,22 @@ class RobotMission(mesa.Model):
 
         return counts
 
+    def get_orchestrator_target(self, agent):
+        if not self.use_orchestrator:
+            return None
+        return self.orchestrator.get_target(agent)
+
     # ===================== step =====================
 
     def step(self):
         robots = [a for a in self.agents if isinstance(a, RobotAgent)]
         self.random.shuffle(robots)
         for robot in robots:
+            if self.use_orchestrator:
+                self.orchestrator.recompute()
             robot.step()
+        if self.use_orchestrator:
+            self.orchestrator.recompute()
         self._expire_messages()
         self.datacollector.collect(self)
 
