@@ -44,7 +44,7 @@ cd robot_mission_MAS2026
 python run.py
 ```
 
-Step impact experiment (Step 1 vs Step 2 vs Step 3):
+Step impact experiment (Step 1 vs Step 2 vs Step 3 + Step 3 ablation):
 ```bash
 cd robot_mission_MAS2026
 python run_step_impact_experiments.py
@@ -217,6 +217,15 @@ The following practical improvements were added to make the simulation more robu
   - `Assigned Green Targets`, `Assigned Yellow Targets`, `Assigned Red Targets`
 - Added page 2 charts to monitor assignment quality over time.
 
+### 10) Uncertainty-aware orchestrator scoring
+- Replaced nearest-only assignment with a weighted target score.
+- Current scoring combines:
+  - Manhattan distance,
+  - radioactivity penalty,
+  - local crowding/contention penalty,
+  - eastward flow bonus for handoff efficiency,
+  - scarcity bonus when a waste color becomes rare.
+
 ## Behavior rules summary
 
 | Robot type | Normal role | Extra coordination rule |
@@ -282,7 +291,7 @@ Communication capabilities are implemented through:
 Step 3 has started with a first coordination layer: a centralized orchestrator that guides all robots toward distributed targets.
 
 Planned next Step 3 increments:
-- integrate uncertainty-aware scoring in orchestrator assignments,
+- tune/calibrate the uncertainty-aware scoring weights in orchestrator assignments,
 - add communication/no-communication/orchestrated benchmark runs,
 - export multi-seed statistics for comparison.
 
@@ -299,47 +308,59 @@ For each configuration, the table compares Step 1, Step 2, and Step 3 on:
 - average remaining waste,
 - average messages sent.
 
+For Step 3, an ablation is included:
+- `step3_orchestrator_nearest` (nearest-only assignment),
+- `step3_orchestrator_uncertainty` (uncertainty-aware weighted score).
+
 ### Configuration C1 — `C1_balanced_small` (`n_green=3`, `n_yellow=2`, `n_red=2`, `n_wastes=15`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 95.0% | 218.85 ± 94.48 | 0.05 ± 0.22 | 0.00 ± 0.00 |
-| Step 2 (communication) | 75.0% | 193.55 ± 181.95 | 0.85 ± 1.57 | 147.30 ± 114.31 |
-| Step 3 (orchestrator + communication) | 100.0% | 89.90 ± 9.81 | 0.00 ± 0.00 | 86.60 ± 12.51 |
+| Step 1 (no communication) | 100.0% | 169.80 ± 63.00 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 100.0% | 106.50 ± 38.70 | 0.00 ± 0.00 | 89.30 ± 23.40 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 90.60 ± 17.70 | 0.00 ± 0.00 | 88.20 ± 20.90 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 92.00 ± 17.20 | 0.00 ± 0.00 | 89.30 ± 17.90 |
 
 ### Configuration C2 — `C2_green_heavy` (`n_green=5`, `n_yellow=2`, `n_red=2`, `n_wastes=25`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 100.0% | 213.25 ± 57.01 | 0.00 ± 0.00 | 0.00 ± 0.00 |
-| Step 2 (communication) | 100.0% | 128.10 ± 81.82 | 0.00 ± 0.00 | 134.20 ± 57.66 |
-| Step 3 (orchestrator + communication) | 100.0% | 103.20 ± 10.25 | 0.00 ± 0.00 | 121.90 ± 10.14 |
+| Step 1 (no communication) | 100.0% | 222.10 ± 78.00 | 0.00 ± 0.00 | 0.00 ± 0.00 |
+| Step 2 (communication) | 95.0% | 132.00 ± 88.00 | 0.15 ± 0.67 | 135.90 ± 64.40 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 122.30 ± 77.50 | 0.00 ± 0.00 | 132.40 ± 48.90 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 101.70 ± 7.00 | 0.00 ± 0.00 | 119.80 ± 7.00 |
 
 ### Configuration C3 — `C3_pipeline_strong` (`n_green=4`, `n_yellow=3`, `n_red=3`, `n_wastes=25`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 100.0% | 160.80 ± 50.02 | 0.00 ± 0.00 | 0.00 ± 0.00 |
-| Step 2 (communication) | 95.0% | 131.25 ± 99.50 | 0.15 ± 0.67 | 137.65 ± 70.10 |
-| Step 3 (orchestrator + communication) | 100.0% | 83.00 ± 11.36 | 0.00 ± 0.00 | 105.95 ± 7.82 |
+| Step 1 (no communication) | 95.0% | 187.30 ± 86.50 | 0.05 ± 0.22 | 0.00 ± 0.00 |
+| Step 2 (communication) | 95.0% | 115.20 ± 93.80 | 0.15 ± 0.67 | 124.20 ± 64.60 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 82.70 ± 11.70 | 0.00 ± 0.00 | 103.70 ± 9.20 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 84.70 ± 11.20 | 0.00 ± 0.00 | 105.50 ± 9.40 |
 
 ### Configuration C4 — `C4_red_limited` (`n_green=4`, `n_yellow=2`, `n_red=1`, `n_wastes=20`)
 
 | Mode | Completion rate | Steps (mean ± std) | Remaining (mean ± std) | Messages (mean ± std) |
 |---|---:|---:|---:|---:|
-| Step 1 (no communication) | 85.0% | 312.60 ± 102.69 | 0.40 ± 1.19 | 0.00 ± 0.00 |
-| Step 2 (communication) | 80.0% | 195.00 ± 160.52 | 0.40 ± 0.82 | 154.10 ± 155.13 |
-| Step 3 (orchestrator + communication) | 100.0% | 126.85 ± 32.04 | 0.00 ± 0.00 | 73.15 ± 8.05 |
+| Step 1 (no communication) | 95.0% | 273.60 ± 119.30 | 0.05 ± 0.22 | 0.00 ± 0.00 |
+| Step 2 (communication) | 80.0% | 233.70 ± 162.30 | 0.50 ± 1.10 | 188.10 ± 151.10 |
+| Step 3 (orchestrator nearest-only) | 100.0% | 134.80 ± 66.30 | 0.00 ± 0.00 | 73.70 ± 6.80 |
+| Step 3 (orchestrator uncertainty-aware) | 100.0% | 135.30 ± 64.40 | 0.00 ± 0.00 | 71.20 ± 7.20 |
 
 ### Interpretation
 
-Across these 20-seed experiments, Step 3 is the most robust and consistent setting:
-- it reaches **100% completion** in all four configurations,
-- it has the **lowest average steps** in all four configurations,
-- it keeps **remaining waste at 0.00** on average in all four configurations,
-- and it sends fewer messages than Step 2 on average in all four configurations.
+Across these refreshed 20-seed experiments, Step 3 (both variants) is the most robust family:
+- both Step 3 variants reach **100% completion** in all four configurations,
+- both are consistently faster than Step 1 and usually faster than Step 2,
+- both keep **remaining waste at 0.00** on average in all four configurations.
 
-Step 2 improves speed over Step 1 in many runs, but it is less stable (larger standard deviations and lower completion rates in some configurations). The orchestrator in Step 3 appears to reduce oscillations and improve convergence reliability.
+Specific impact of uncertainty-aware scoring (`uncertainty` vs `nearest`):
+- **C2**: clear gain from uncertainty-aware scoring (lower steps and lower messages).
+- **C4**: similar steps, but uncertainty-aware scoring reduces message traffic.
+- **C1/C3**: nearest-only is slightly faster and sends slightly fewer messages.
+
+So, uncertainty-aware scoring helps most in harder/imbalanced settings, while in easier settings both Step 3 variants are close. This indicates the weighting is useful but still needs calibration for uniformly best performance.
 
 ## Requirements
 

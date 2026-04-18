@@ -129,7 +129,7 @@ class SafeDataCollector(mesa.DataCollector):
 
 
 class MissionOrchestrator:
-    """Centralized coordinator that assigns waste targets to robots."""
+    """Centralized coordinator with uncertainty-aware target assignment."""
 
     def __init__(self, model):
         self.model = model
@@ -150,6 +150,13 @@ class MissionOrchestrator:
     def _manhattan(a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
+    def _radioactivity_level_at(self, pos):
+        contents = self.model.grid.get_cell_list_contents([pos])
+        for obj in contents:
+            if isinstance(obj, Radioactivity):
+                return float(obj.level)
+        return 0.0
+
     def _on_grid_waste_positions(self):
         positions = {"green": [], "yellow": [], "red": []}
         for a in self.model.agents:
@@ -165,17 +172,81 @@ class MissionOrchestrator:
     def _is_carrying_any_waste(robot):
         return any(getattr(w, "color", None) in {"green", "yellow", "red"} for w in robot.inventory)
 
-    def _nearest_unreserved(self, origin, candidates, reserved):
-        best = None
-        best_dist = float("inf")
-        for p in candidates:
-            if p in reserved:
+    def _crowding_near(self, pos, radius=1):
+        crowd = 0
+        for a in self.model.agents:
+            if isinstance(a, RobotAgent) and a.pos is not None:
+                if self._manhattan(a.pos, pos) <= radius:
+                    crowd += 1
+        return crowd
+
+    def _score_target(self, robot, target_pos, target_color, remaining):
+        """Lower score is better.
+
+        Components:
+        - distance cost,
+        - radioactivity uncertainty penalty,
+        - local crowding/contention penalty,
+        - flow bonus toward east (helps handoff pipeline),
+        - scarcity bonus for critical leftovers.
+        """
+        distance = self._manhattan(robot.pos, target_pos)
+        radio_level = self._radioactivity_level_at(target_pos)
+        crowding = self._crowding_near(target_pos, radius=1)
+
+        # uncertainty terms
+        radio_penalty = 2.5 * radio_level
+        crowd_penalty = 1.5 * max(0, crowding - 1)
+
+        # east-flow bonus for smoother handoff toward disposal column
+        width_denom = max(1, self.model.grid.width - 1)
+        east_progress = target_pos[0] / width_denom
+        if isinstance(robot, RedAgent):
+            east_bonus = 0.30 * east_progress
+        else:
+            east_bonus = 0.60 * east_progress
+
+        # prioritize scarce colors to reduce end-game deadlocks
+        scarcity_bonus = 0.0
+        if remaining.get(target_color, 0) <= 2:
+            scarcity_bonus = 0.75
+        if remaining.get(target_color, 0) == 1:
+            scarcity_bonus = 1.25
+
+        return distance + radio_penalty + crowd_penalty - east_bonus - scarcity_bonus
+
+    def _best_unreserved_target(self, robot, candidates, reserved, remaining):
+        """Pick best target by uncertainty-aware score.
+
+        candidates: iterable of (pos, color)
+        """
+        if not self.model.use_uncertainty_scoring:
+            nearest = []
+            for pos, color in candidates:
+                if pos in reserved:
+                    continue
+                nearest.append((self._manhattan(robot.pos, pos), pos, color))
+
+            if not nearest:
+                return None, None
+
+            nearest.sort(key=lambda t: (t[0], t[1][0], t[1][1]))
+            _, best_pos, best_color = nearest[0]
+            return best_pos, best_color
+
+        ranked = []
+        for pos, color in candidates:
+            if pos in reserved:
                 continue
-            d = self._manhattan(origin, p)
-            if d < best_dist:
-                best_dist = d
-                best = p
-        return best
+            score = self._score_target(robot, pos, color, remaining)
+            ranked.append((score, self._manhattan(robot.pos, pos), pos, color))
+
+        if not ranked:
+            return None, None
+
+        ranked.sort(key=lambda t: (t[0], t[1], t[2][0], t[2][1]))
+        _, _, best_pos, best_color = ranked[0]
+        return best_pos, best_color
 
     def recompute(self):
         assignments = {}
@@ -212,7 +283,8 @@ class MissionOrchestrator:
             if self._count_inventory(robot, "green") >= 2:
                 continue
             stats["eligible_green"] += 1
-            target = self._nearest_unreserved(robot.pos, positions["green"], reserved)
+            green_candidates = [(p, "green") for p in positions["green"]]
+            target, _ = self._best_unreserved_target(robot, green_candidates, reserved, remaining)
             if target is not None:
                 assignments[robot.unique_id] = target
                 reserved.add(target)
@@ -224,7 +296,8 @@ class MissionOrchestrator:
             if self._count_inventory(robot, "yellow") >= 2:
                 continue
             stats["eligible_yellow"] += 1
-            target = self._nearest_unreserved(robot.pos, positions["yellow"], reserved)
+            yellow_candidates = [(p, "yellow") for p in positions["yellow"]]
+            target, _ = self._best_unreserved_target(robot, yellow_candidates, reserved, remaining)
             if target is not None:
                 assignments[robot.unique_id] = target
                 reserved.add(target)
@@ -244,9 +317,9 @@ class MissionOrchestrator:
 
             candidates = []
             for color in collectable:
-                candidates.extend(positions[color])
+                candidates.extend((p, color) for p in positions[color])
 
-            target = self._nearest_unreserved(robot.pos, candidates, reserved)
+            target, _ = self._best_unreserved_target(robot, candidates, reserved, remaining)
             if target is not None:
                 assignments[robot.unique_id] = target
                 reserved.add(target)
@@ -273,13 +346,15 @@ class RobotMission(mesa.Model):
 
     def __init__(self, width=15, height=10, n_green=4, n_yellow=2,
                  n_red=2, n_wastes=20, seed=None,
-                 use_communication=True, use_orchestrator=True):
+                 use_communication=True, use_orchestrator=True,
+                 use_uncertainty_scoring=True):
         super().__init__(seed=seed)
 
         self.grid = mesa.space.MultiGrid(width, height, torus=False)
         self.disposed_count = 0
         self.use_communication = use_communication
         self.use_orchestrator = use_orchestrator
+        self.use_uncertainty_scoring = use_uncertainty_scoring
         self.total_messages_sent = 0
 
         # ---- communication: shared message board ----

@@ -30,9 +30,16 @@ MODES = [
         "use_orchestrator": False,
     },
     {
-        "mode": "step3_orchestrator",
+        "mode": "step3_orchestrator_nearest",
         "use_communication": True,
         "use_orchestrator": True,
+        "use_uncertainty_scoring": False,
+    },
+    {
+        "mode": "step3_orchestrator_uncertainty",
+        "use_communication": True,
+        "use_orchestrator": True,
+        "use_uncertainty_scoring": True,
     },
 ]
 
@@ -48,6 +55,7 @@ def run_one(config, mode, seed, max_steps=MAX_STEPS):
         seed=seed,
         use_communication=mode["use_communication"],
         use_orchestrator=mode["use_orchestrator"],
+        use_uncertainty_scoring=mode.get("use_uncertainty_scoring", False),
     )
 
     completed = False
